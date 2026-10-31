@@ -21,6 +21,7 @@ from .const import (
     DEFAULT_PORT,
     CONF_OPTION_POLLING_RATE,
     CONF_OPTION_QUIET_UNREACHABLE,
+    CONF_OPTION_POWER_SWITCH,
     CONF_OPTION_CAMERA_STREAM,
     CONF_OPTION_CAMERA_SNAPSHOT,
     CONF_OPTION_CAMERA_PORT,
@@ -97,12 +98,16 @@ class MoonrakerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional(CONF_PORT, default=user_input[CONF_PORT]): str,
                     vol.Optional(CONF_TLS, default=user_input[CONF_TLS]): bool,
                     vol.Optional(CONF_API_KEY, default=user_input[CONF_API_KEY]): str,
-                    vol.Optional(
-                        CONF_PRINTER_NAME, default=user_input[CONF_PRINTER_NAME]
-                    ): str,
-                }
+                    vol.Optional(CONF_PRINTER_NAME, default=user_input[CONF_PRINTER_NAME]): str,
+                    vol.Optional(CONF_OPTION_POLLING_RATE, default=user_input.get(CONF_OPTION_POLLING_RATE, 30)): int,
+                    vol.Optional(CONF_OPTION_QUIET_UNREACHABLE, default=user_input.get(CONF_OPTION_QUIET_UNREACHABLE, False)): bool,
+                    vol.Optional(CONF_OPTION_POWER_SWITCH, default=user_input.get(CONF_OPTION_POWER_SWITCH, None)): str,
+                    vol.Optional(CONF_OPTION_CAMERA_STREAM, default=user_input.get(CONF_OPTION_CAMERA_STREAM, None)): str,
+                    vol.Optional(CONF_OPTION_CAMERA_SNAPSHOT, default=user_input.get(CONF_OPTION_CAMERA_SNAPSHOT, None)): str,
+                    vol.Optional(CONF_OPTION_CAMERA_PORT, default=user_input.get(CONF_OPTION_CAMERA_PORT, None)): int,
+                    vol.Optional(CONF_OPTION_THUMBNAIL_PORT, default=user_input.get(CONF_OPTION_THUMBNAIL_PORT, None)): int,
+                },
             ),
-            errors=self._errors,
         )
 
     async def _test_host(self, host: str):
@@ -179,6 +184,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             CONF_OPTION_QUIET_UNREACHABLE, False
                         ),
                     ): bool,
+                    vol.Optional(
+                        CONF_OPTION_POWER_SWITCH,
+                        default=self.config_entry.options.get(
+                            CONF_OPTION_POWER_SWITCH, None
+                        ),
+                    ): str,
                     vol.Optional(
                         CONF_OPTION_CAMERA_STREAM,
                         default=self.config_entry.options.get(

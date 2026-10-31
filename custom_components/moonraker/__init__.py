@@ -23,6 +23,8 @@ from .const import (
     CONF_PRINTER_NAME,
     CONF_OPTION_POLLING_RATE,
     CONF_OPTION_QUIET_UNREACHABLE,
+    CONF_OPTION_POWER_SWITCH,
+    CONF_OPTION_POWER_SWITCH,
     CONF_TLS,
     CONF_URL,
     DEFAULT_PORT,
@@ -213,6 +215,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     printer_name = (
         entry.data.get(CONF_PRINTER_NAME) if custom_name is None else custom_name
     )
+    power_switch = entry.data.get(CONF_OPTION_POWER_SWITCH)
 
     SCAN_INTERVAL = timedelta(seconds=entry.options.get(CONF_OPTION_POLLING_RATE, 30))
 
@@ -226,13 +229,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     try:
         if not await _async_is_tcp_reachable(url, port):
-            _log_unreachable(
-                entry,
-                "Cannot configure moonraker instance: %s:%s is unreachable",
-                url,
-                port,
-            )
-            raise ConfigEntryNotReady(f"Error connecting to {url}:{port}")
+            # Check if the power switch is off before reporting failure
+            if power_switch:
+                state = hass.states.get(power_switch)
+                if state and state.state == "off":
+                    _LOGGER.info("Printer %s is powered off via switch %s", printer_name, power_switch)
+                    # Proceed with setup even though unreachable
+                else:
+                    _log_unreachable(
+                        entry,
+                        "Cannot configure moonraker instance: %s:%s is unreachable",
+                        url,
+                        port,
+                    )
+                    raise ConfigEntryNotReady(f"Error connecting to {url}:{port}")
+            else:
+                _log_unreachable(
+                    entry,
+                    "Cannot configure moonraker instance: %s:%s is unreachable",
+                    url,
+                    port,
+                )
+                raise ConfigEntryNotReady(f"Error connecting to {url}:{port}")
 
         async with asyncio.timeout(TIMEOUT):
             await api.start()
@@ -257,14 +275,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         raise ConfigEntryNotReady(f"Error connecting to {url}:{port}") from exc
 
     coordinator = MoonrakerDataUpdateCoordinator(
-        hass, client=api, config_entry=entry, api_device_name=api_device_name
+        hass, client=api, config_entry=entry, api_device_name=api_device_name, power_switch=power_switch
     )
 
+    # We don't strictly require the first refresh to succeed during setup.
+    # The coordinator will continue to attempt refreshes in the background.
     await coordinator.async_refresh()
-
-    if not coordinator.last_update_success:
-        raise ConfigEntryNotReady
-
     hass.data[DOMAIN][entry.entry_id] = coordinator
     for platform in PLATFORMS:
         coordinator.platforms.append(platform)
@@ -389,6 +405,7 @@ class MoonrakerDataUpdateCoordinator(DataUpdateCoordinator):
         client: MoonrakerApiClient,
         config_entry: ConfigEntry,
         api_device_name: str,
+        power_switch: str | None,
     ) -> None:
         """Initialize."""
         self.moonraker = client
@@ -401,6 +418,7 @@ class MoonrakerDataUpdateCoordinator(DataUpdateCoordinator):
         self.hass = hass
         self.config_entry = config_entry
         self.api_device_name = api_device_name
+        self.power_switch = power_switch
         self.query_obj = {OBJ: {}}
         self.load_sensor_data(SENSORS)
         self.add_query_objects("virtual_sdcard", "file_path")
